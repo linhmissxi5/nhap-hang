@@ -1,0 +1,485 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bảng kê nhập hàng</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 10px auto;
+      padding: 10px;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    label {
+      font-size: 14px;
+    }
+    input[type="text"],
+    input[type="number"],
+    select,
+    input[type="date"] {
+      padding: 4px 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .row {
+      margin-bottom: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    th,
+    td {
+      border: 1px solid #999;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    button {
+      margin-top: 6px;
+      padding: 6px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-inline {
+      margin-left: 4px;
+      margin-top: 0;
+    }
+    #capture-area {
+      display: inline-block;
+      padding: 12px;
+      background: #ffffff;
+    }
+    #print-header {
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    #print-header strong {
+      font-weight: 600;
+    }
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      th.col-ton,
+      td.col-ton,
+      th.col-need,
+      td.col-need {
+        display: none !important;
+      }
+      tr[data-hide-print="1"] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>BẢNG KÊ NHẬP HÀNG</h1>
+
+  <!-- Nhà cung cấp -->
+  <div class="row no-print">
+    <label>Nhà cung cấp:
+      <select id="supplier-select" style="min-width: 220px;"></select>
+    </label>
+    <label style="margin-left: 8px;">
+      Tên NCC:
+      <input type="text" id="supplier-name-input" style="width: 220px;" placeholder="Nhập / sửa tên NCC">
+    </label>
+    <button type="button" class="btn-inline" onclick="addSupplier()">+ NCC mới</button>
+    <button type="button" class="btn-inline" onclick="saveEditedSupplier()">Lưu tên NCC</button>
+    <button type="button" class="btn-inline" onclick="deleteCurrentSupplier()">Xóa NCC</button>
+  </div>
+
+  <!-- Ngày -->
+  <div class="row no-print">
+    <label>Ngày:
+      <input type="date" id="date-input" onchange="updatePrintDate()">
+    </label>
+  </div>
+
+  <!-- Thêm sản phẩm -->
+  <div class="row no-print">
+    <label>Thêm sản phẩm cho NCC đang chọn:
+      <input type="text" id="new-product-name" placeholder="Tên sản phẩm" style="width: 260px;">
+    </label>
+    <button type="button" class="btn-inline" onclick="addProductForCurrentSupplier()">+ Lưu sản phẩm</button>
+  </div>
+
+  <!-- Khu in -->
+  <div id="capture-area">
+    <div id="print-header">
+      <div><strong>Nhà cung cấp:</strong> <span id="print-supplier-name"></span></div>
+      <div><strong>Ngày:</strong> <span id="print-date"></span></div>
+    </div>
+
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th>Sản phẩm</th>
+          <th class="col-ton">Hàng tồn</th>
+          <th class="col-need">Số lượng cần có</th>
+          <th>Số lượng cần lấy</th>
+          <th>Ghi chú</th>
+          <th class="no-print">Xóa</th>
+        </tr>
+      </thead>
+      <tbody id="product-body"></tbody>
+    </table>
+  </div>
+
+  <button class="no-print" type="button" onclick="addTempRow()">+ Thêm dòng tạm</button>
+
+  <div class="row no-print">
+    <!-- Chỉ còn nút Lưu PDF -->
+    <button type="button" onclick="savePDF()">Lưu PDF</button>
+  </div>
+
+  <script>
+    var STORAGE_KEY = 'nhap_hang_data_v5';
+    var appData = { suppliers: [], products: [] };
+
+    function loadData() {
+      appData = { suppliers: [], products: [] };
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.suppliers && parsed.suppliers.constructor === Array) {
+              appData.suppliers = parsed.suppliers;
+            }
+            if (parsed.products && parsed.products.constructor === Array) {
+              appData.products = parsed.products;
+            }
+          }
+        }
+      } catch (e) {
+        console.log('Lỗi load dữ liệu, reset về rỗng', e);
+        appData = { suppliers: [], products: [] };
+      }
+    }
+
+    function saveData() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+      } catch (e) {
+        console.log('Lỗi lưu dữ liệu', e);
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/[&<>"']/g, function (m) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[m];
+      });
+    }
+
+    // ===== Nhà cung cấp =====
+
+    function renderSuppliers() {
+      var select = document.getElementById('supplier-select');
+      select.innerHTML = '';
+
+      var optAll = document.createElement('option');
+      optAll.value = '';
+      optAll.textContent = '-- Tất cả nhà cung cấp --';
+      select.appendChild(optAll);
+
+      for (var i = 0; i < appData.suppliers.length; i++) {
+        var s = appData.suppliers[i];
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        select.appendChild(opt);
+      }
+
+      select.onchange = onSupplierChange;
+      select.value = '';
+      onSupplierChange();
+    }
+
+    function getCurrentSupplierId() {
+      var v = document.getElementById('supplier-select').value;
+      return v ? v : '';
+    }
+
+    function onSupplierChange() {
+      var supplierId = getCurrentSupplierId();
+      var supplierInput = document.getElementById('supplier-name-input');
+      var printSpan = document.getElementById('print-supplier-name');
+
+      if (!supplierId) {
+        supplierInput.value = '';
+        printSpan.textContent = 'Tất cả';
+      } else {
+        var supplier = null;
+        for (var i = 0; i < appData.suppliers.length; i++) {
+          if (appData.suppliers[i].id === supplierId) {
+            supplier = appData.suppliers[i];
+            break;
+          }
+        }
+        supplierInput.value = supplier ? supplier.name : '';
+        printSpan.textContent = supplier ? supplier.name : '';
+      }
+      renderRows();
+    }
+
+    function addSupplier() {
+      var nameInput = document.getElementById('supplier-name-input');
+      var name = nameInput.value.replace(/^\s+|\s+$/g, '');
+      if (!name) {
+        alert('Nhập tên NCC trước.');
+        return;
+      }
+      var id = 'ncc_' + new Date().getTime();
+      appData.suppliers.push({ id: id, name: name });
+      saveData();
+      renderSuppliers();
+      document.getElementById('supplier-select').value = id;
+      onSupplierChange();
+    }
+
+    function saveEditedSupplier() {
+      var supplierId = getCurrentSupplierId();
+      if (!supplierId) {
+        alert('Chọn NCC để sửa.');
+        return;
+      }
+      var supplier = null;
+      for (var i = 0; i < appData.suppliers.length; i++) {
+        if (appData.suppliers[i].id === supplierId) {
+          supplier = appData.suppliers[i];
+          break;
+        }
+      }
+      if (!supplier) return;
+      var newName = document.getElementById('supplier-name-input').value.replace(/^\s+|\s+$/g, '');
+      if (!newName) {
+        alert('Tên NCC không được để trống.');
+        document.getElementById('supplier-name-input').value = supplier.name;
+        return;
+      }
+      supplier.name = newName;
+      saveData();
+      renderSuppliers();
+      document.getElementById('supplier-select').value = supplierId;
+      onSupplierChange();
+    }
+
+    function deleteCurrentSupplier() {
+      var supplierId = getCurrentSupplierId();
+      if (!supplierId) {
+        alert('Không thể xoá ở chế độ Tất cả.');
+        return;
+      }
+      var supplier = null;
+      for (var i = 0; i < appData.suppliers.length; i++) {
+        if (appData.suppliers[i].id === supplierId) {
+          supplier = appData.suppliers[i];
+          break;
+        }
+      }
+      if (!supplier) return;
+      if (!window.confirm('Xóa nhà cung cấp "' + supplier.name + '" và toàn bộ sản phẩm?')) return;
+      appData.suppliers = appData.suppliers.filter(function (s) { return s.id !== supplierId; });
+      appData.products = appData.products.filter(function (p) { return p.supplierId !== supplierId; });
+      saveData();
+      renderSuppliers();
+    }
+
+    // ===== Sản phẩm =====
+
+    function renderRows() {
+      var tbody = document.getElementById('product-body');
+      tbody.innerHTML = '';
+      var supplierId = getCurrentSupplierId();
+      var list = [];
+      if (!supplierId) {
+        list = appData.products.slice();
+      } else {
+        for (var i = 0; i < appData.products.length; i++) {
+          if (appData.products[i].supplierId === supplierId) {
+            list.push(appData.products[i]);
+          }
+        }
+      }
+
+      if (list.length === 0) {
+        var trEmpty = document.createElement('tr');
+        trEmpty.innerHTML = '<td colspan="6">Chưa có sản phẩm nào.</td>';
+        tbody.appendChild(trEmpty);
+        return;
+      }
+
+      for (var j = 0; j < list.length; j++) {
+        var p = list[j];
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-product-id', p.id);
+        tr.innerHTML =
+          '<td>' +
+          '<input type="text" class="pname" value="' + escapeHtml(p.name) + '" onblur="updateProductName(this)">' +
+          '</td>' +
+          '<td class="col-ton"><input type="number" class="ton" min="0" oninput="updateSuggest(this)"></td>' +
+          '<td class="col-need"><input type="number" class="need" min="0" oninput="updateSuggest(this)"></td>' +
+          '<td><input type="number" class="qty" min="0"></td>' +
+          '<td><input type="text" class="note"></td>' +
+          '<td class="no-print"><button type="button" onclick="deleteRow(this)">X</button></td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function addProductForCurrentSupplier() {
+      var supplierId = getCurrentSupplierId();
+      if (!supplierId) {
+        alert('Chọn NCC trước.');
+        return;
+      }
+      var input = document.getElementById('new-product-name');
+      var name = input.value.replace(/^\s+|\s+$/g, '');
+      if (!name) return;
+      var id = 'p_' + new Date().getTime();
+      appData.products.push({ id: id, supplierId: supplierId, name: name });
+      saveData();
+      input.value = '';
+      renderRows();
+    }
+
+    function updateProductName(inputEl) {
+      var tr = inputEl.closest('tr');
+      if (!tr) return;
+      var productId = tr.getAttribute('data-product-id');
+      var product = null;
+      for (var i = 0; i < appData.products.length; i++) {
+        if (appData.products[i].id === productId) {
+          product = appData.products[i];
+          break;
+        }
+      }
+      if (!product) return;
+      var newName = inputEl.value.replace(/^\s+|\s+$/g, '');
+      if (!newName) {
+        alert('Tên sản phẩm không được trống.');
+        inputEl.value = product.name;
+        return;
+      }
+      product.name = newName;
+      saveData();
+    }
+
+    function addTempRow() {
+      var tbody = document.getElementById('product-body');
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><input type="text" class="pname"></td>' +
+        '<td class="col-ton"><input type="number" class="ton" min="0" oninput="updateSuggest(this)"></td>' +
+        '<td class="col-need"><input type="number" class="need" min="0" oninput="updateSuggest(this)"></td>' +
+        '<td><input type="number" class="qty" min="0"></td>' +
+        '<td><input type="text" class="note"></td>' +
+        '<td class="no-print"><button type="button" onclick="deleteRow(this)">X</button></td>';
+      tbody.appendChild(tr);
+    }
+
+    function deleteRow(btn) {
+      if (!window.confirm('Xóa sản phẩm này?')) return;
+      var tr = btn.closest('tr');
+      if (!tr) return;
+      var productId = tr.getAttribute('data-product-id');
+      if (productId) {
+        appData.products = appData.products.filter(function (p) { return p.id !== productId; });
+        saveData();
+      }
+      tr.parentNode.removeChild(tr);
+    }
+
+    function updateSuggest(el) {
+      var tr = el.closest('tr');
+      if (!tr) return;
+      var tonInput = tr.querySelector('.ton');
+      var needInput = tr.querySelector('.need');
+      var qtyInput = tr.querySelector('.qty');
+      if (!qtyInput) return;
+      var ton = tonInput && tonInput.value ? parseFloat(tonInput.value) : 0;
+      var need = needInput && needInput.value ? parseFloat(needInput.value) : 0;
+      if (isNaN(ton)) ton = 0;
+      if (isNaN(need)) need = 0;
+      var diff = need - ton;
+      if (diff > 0) {
+        qtyInput.placeholder = 'gợi ý ' + diff;
+      } else {
+        qtyInput.placeholder = '';
+      }
+    }
+
+    // ===== Ngày =====
+
+    function updatePrintDate() {
+      var v = document.getElementById('date-input').value;
+      if (!v) {
+        document.getElementById('print-date').textContent = '';
+        return;
+      }
+      var parts = v.split('-');
+      if (parts.length !== 3) {
+        document.getElementById('print-date').textContent = v;
+        return;
+      }
+      document.getElementById('print-date').textContent = parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+
+    // ===== PDF (in rồi chọn Save as PDF) =====
+
+    function markPrintRows() {
+      var rows = document.querySelectorAll('#product-body tr');
+      for (var i = 0; i < rows.length; i++) {
+        var tr = rows[i];
+        var qtyInput = tr.querySelector('.qty');
+        var val = qtyInput ? qtyInput.value : '';
+        if (!val || Number(val) === 0) {
+          tr.setAttribute('data-hide-print', '1');
+        } else {
+          tr.removeAttribute('data-hide-print');
+        }
+      }
+    }
+
+    function savePDF() {
+      markPrintRows();
+      window.print();
+    }
+
+    // ===== Khởi động =====
+    (function init() {
+      loadData();
+      renderSuppliers();
+
+      // Ngày luôn nhảy về hôm nay khi mở
+      var today = new Date();
+      var iso = today.toISOString().slice(0, 10); // yyyy-mm-dd
+      var dateInput = document.getElementById('date-input');
+      dateInput.value = iso;
+      updatePrintDate();
+    })();
+  </script>
+</body>
+</html>
