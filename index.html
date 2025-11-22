@@ -4,6 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Bảng kê nhập hàng</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -59,6 +61,8 @@
       display: inline-block;
       padding: 12px;
       background: #ffffff;
+      width: 100%;
+      box-sizing: border-box;
     }
     #print-header {
       font-size: 13px;
@@ -67,6 +71,35 @@
     #print-header strong {
       font-weight: 600;
     }
+
+    /* Mobile tweak */
+    @media (max-width: 600px) {
+      body {
+        max-width: 100%;
+        margin: 0;
+        padding: 8px;
+        font-size: 15px;
+      }
+      h1 {
+        font-size: 18px;
+      }
+      table {
+        font-size: 13px;
+      }
+      th, td {
+        padding: 4px 3px;
+      }
+      input[type="text"],
+      input[type="number"],
+      select,
+      input[type="date"] {
+        width: 100%;
+      }
+      .row {
+        display: block;
+      }
+    }
+
     @media print {
       .no-print {
         display: none !important;
@@ -145,7 +178,7 @@
   <button class="no-print" type="button" onclick="addTempRow()">+ Thêm dòng tạm</button>
 
   <div class="row no-print">
-    <!-- Chỉ còn nút Lưu PDF + Sao lưu / Phục hồi -->
+    <!-- Lưu PDF + Sao lưu / Phục hồi -->
     <button type="button" onclick="savePDF()">Lưu PDF</button>
     <button type="button" class="btn-inline" onclick="downloadBackup()">Sao lưu dữ liệu</button>
     <button type="button" class="btn-inline" onclick="triggerRestore()">Phục hồi từ file</button>
@@ -169,7 +202,6 @@
               appData.suppliers = parsed.suppliers;
             }
             if (parsed.products && parsed.products.constructor === Array) {
-              // Đảm bảo mỗi product có trường unit (ĐVT)
               for (var i = 0; i < parsed.products.length; i++) {
                 var p = parsed.products[i];
                 if (typeof p.unit === 'undefined') {
@@ -374,7 +406,6 @@
       var name = input.value.replace(/^\s+|\s+$/g, '');
       if (!name) return;
       var id = 'p_' + new Date().getTime();
-      // mặc định unit rỗng
       appData.products.push({ id: id, supplierId: supplierId, name: name, unit: '' });
       saveData();
       input.value = '';
