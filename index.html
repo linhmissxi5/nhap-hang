@@ -133,6 +133,7 @@
           <th class="col-ton">Hàng tồn</th>
           <th class="col-need">Số lượng cần có</th>
           <th>Số lượng cần lấy</th>
+          <th>ĐVT</th>
           <th>Ghi chú</th>
           <th class="no-print">Xóa</th>
         </tr>
@@ -163,6 +164,13 @@
               appData.suppliers = parsed.suppliers;
             }
             if (parsed.products && parsed.products.constructor === Array) {
+              // Đảm bảo mỗi product có trường unit (ĐVT)
+              for (var i = 0; i < parsed.products.length; i++) {
+                var p = parsed.products[i];
+                if (typeof p.unit === 'undefined') {
+                  p.unit = '';
+                }
+              }
               appData.products = parsed.products;
             }
           }
@@ -327,13 +335,14 @@
 
       if (list.length === 0) {
         var trEmpty = document.createElement('tr');
-        trEmpty.innerHTML = '<td colspan="6">Chưa có sản phẩm nào.</td>';
+        trEmpty.innerHTML = '<td colspan="7">Chưa có sản phẩm nào.</td>';
         tbody.appendChild(trEmpty);
         return;
       }
 
       for (var j = 0; j < list.length; j++) {
         var p = list[j];
+        if (typeof p.unit === 'undefined') p.unit = '';
         var tr = document.createElement('tr');
         tr.setAttribute('data-product-id', p.id);
         tr.innerHTML =
@@ -343,6 +352,7 @@
           '<td class="col-ton"><input type="number" class="ton" min="0" oninput="updateSuggest(this)"></td>' +
           '<td class="col-need"><input type="number" class="need" min="0" oninput="updateSuggest(this)"></td>' +
           '<td><input type="number" class="qty" min="0"></td>' +
+          '<td><input type="text" class="unit" value="' + escapeHtml(p.unit) + '" onblur="updateProductUnit(this)"></td>' +
           '<td><input type="text" class="note"></td>' +
           '<td class="no-print"><button type="button" onclick="deleteRow(this)">X</button></td>';
         tbody.appendChild(tr);
@@ -359,7 +369,8 @@
       var name = input.value.replace(/^\s+|\s+$/g, '');
       if (!name) return;
       var id = 'p_' + new Date().getTime();
-      appData.products.push({ id: id, supplierId: supplierId, name: name });
+      // mặc định unit rỗng
+      appData.products.push({ id: id, supplierId: supplierId, name: name, unit: '' });
       saveData();
       input.value = '';
       renderRows();
@@ -387,6 +398,23 @@
       saveData();
     }
 
+    function updateProductUnit(inputEl) {
+      var tr = inputEl.closest('tr');
+      if (!tr) return;
+      var productId = tr.getAttribute('data-product-id');
+      var product = null;
+      for (var i = 0; i < appData.products.length; i++) {
+        if (appData.products[i].id === productId) {
+          product = appData.products[i];
+          break;
+        }
+      }
+      if (!product) return;
+      var newUnit = inputEl.value.replace(/^\s+|\s+$/g, '');
+      product.unit = newUnit;
+      saveData();
+    }
+
     function addTempRow() {
       var tbody = document.getElementById('product-body');
       var tr = document.createElement('tr');
@@ -395,6 +423,7 @@
         '<td class="col-ton"><input type="number" class="ton" min="0" oninput="updateSuggest(this)"></td>' +
         '<td class="col-need"><input type="number" class="need" min="0" oninput="updateSuggest(this)"></td>' +
         '<td><input type="number" class="qty" min="0"></td>' +
+        '<td><input type="text" class="unit"></td>' +
         '<td><input type="text" class="note"></td>' +
         '<td class="no-print"><button type="button" onclick="deleteRow(this)">X</button></td>';
       tbody.appendChild(tr);
