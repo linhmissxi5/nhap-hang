@@ -96,6 +96,7 @@ tr.selected {
   <button id='btnAddRow'>+ Dòng</button>
   <button id='btnDeleteRow'>Xoá dòng</button>
   <button id='btnExportPDF'>PDF</button>
+  <button id='btnExportStockPDF'>PDF tồn</button>
   <button id='btnExportImage'>Ảnh</button>
 </div>
 
@@ -342,6 +343,72 @@ function exportPDF(){
   clearExportMarksPDF();
 }
 
+
+function exportStockPDF(){
+  saveCurrentSupplierData();
+
+  const name = currentSupplier || '';
+  const rows = tableBody.querySelectorAll('tr');
+
+  let htmlContent = `
+  <html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Danh sách tồn kho</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:20px;}
+      h2{font-size:18px;margin-bottom:10px;}
+      table{width:100%;border-collapse:collapse;}
+      th,td{border:1px solid #333;padding:4px 6px;font-size:12px;text-align:left;}
+      th{text-align:center;}
+    </style>
+  </head>
+  <body>
+    <h2>${name ? 'Nhà cung cấp: ' + name : 'Danh sách tồn kho'}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sản phẩm</th>
+          <th>Tồn</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  rows.forEach(row=>{
+    const cells = row.querySelectorAll('td');
+    if(cells.length < 5) return;
+    const product = cells[1].textContent.trim();
+    const stockInput = cells[4].querySelector('input');
+    const stock = stockInput ? (stockInput.value || '') : '';
+    if(!product && !stock) return;
+    htmlContent += `
+        <tr>
+          <td>${product}</td>
+          <td>${stock}</td>
+        </tr>
+    `;
+  });
+
+  htmlContent += `
+      </tbody>
+    </table>
+  </body>
+  </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  if(!printWindow) {
+    alert('Trình duyệt chặn cửa sổ in. Hãy cho phép popup để in PDF.');
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
 // Xuất ảnh PNG mượt: clone bảng ra off-screen, xử lý trên bản clone
 function exportImage(){
   const ok = confirm('Xuất ảnh PNG với các dòng có số lượng > 0?');
@@ -470,6 +537,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnAddRow').addEventListener('click',addEmptyRow);
   document.getElementById('btnExportPDF').addEventListener('click',exportPDF);
   document.getElementById('btnExportImage').addEventListener('click',exportImage);
+  document.getElementById('btnExportStockPDF').addEventListener('click',exportStockPDF);
 
   document.getElementById('btnAddSupplier').addEventListener('click',addSupplier);
   document.getElementById('btnRenameSupplier').addEventListener('click',renameSupplier);
@@ -495,6 +563,20 @@ document.addEventListener('DOMContentLoaded',()=>{
     relabelIndex();
     saveCurrentSupplierData();
   });
+
+  // Tự động lưu khi sửa số lượng / tồn / cần có
+  tableBody.addEventListener('input',(e)=>{
+    if(e.target.matches('input')){
+      saveCurrentSupplierData();
+    }
+  });
+
+  // Tự động lưu khi sửa nội dung ô text (sản phẩm, ĐVT, ghi chú)
+  tableBody.addEventListener('blur',(e)=>{
+    if(e.target.isContentEditable){
+      saveCurrentSupplierData();
+    }
+  }, true);
 });
 </script>
 </body>
