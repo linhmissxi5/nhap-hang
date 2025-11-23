@@ -60,10 +60,30 @@ td[contenteditable='true']{background-color:#fffef7;outline:none;}
    max-width:160px;
  }
 }
+
+/* Xóa viền input khi in PDF */
+@media print{
+  input{
+    border:none!important;
+    outline:none!important;
+    background:transparent!important;
+  }
+}
+
+/* Xóa viền input trên bản clone khi xuất ảnh PNG */
+#table-wrapper-export input{
+  border:none!important;
+  outline:none!important;
+  background:transparent!important;
+}
+
+tr.selected {
+  background-color:#ffe2e2!important;
+}
 </style>
 </head>
 <body>
-<h1>Bảng nhập hàng (offline)</h1>
+<h1>Bảng Nhập Hàng ( Thành Hương - Nghệ An )</h1>
 
 <div class='toolbar'>
   <label for='supplierSelect'>NCC:</label>
@@ -74,22 +94,23 @@ td[contenteditable='true']{background-color:#fffef7;outline:none;}
   <button id='btnDeleteSupplier'>Xóa NCC</button>
 
   <button id='btnAddRow'>+ Dòng</button>
+  <button id='btnDeleteRow'>Xoá dòng</button>
   <button id='btnExportPDF'>PDF</button>
   <button id='btnExportImage'>Ảnh</button>
 </div>
 
 <div id='table-wrapper'>
-  <div id='supplierNameDisplay'>Nhà cung cấp: (chưa chọn)</div>
+  <div id='supplierNameDisplay'>(chưa chọn)</div>
   <table id='importTable'>
     <thead>
       <tr>
         <th class='narrow col-stt'>#</th>
-        <th class='col-product'>Sản phẩm<br><small>(sửa)</small></th>
+        <th class='col-product'>Sản phẩm</th>
         <th class='col-qty'>SL</th>
         <th class='col-unit'>ĐVT</th>
         <th class='col-stock'>Tồn</th>
         <th class='col-needed'>Cần có</th>
-        <th class='note-col'>Ghi chú<br><small>(sửa)</small></th>
+        <th class='note-col'>Ghi chú</th>
       </tr>
     </thead>
     <tbody id='tableBody'></tbody>
@@ -99,10 +120,10 @@ td[contenteditable='true']{background-color:#fffef7;outline:none;}
 <script src='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'></script>
 
 <script>
-// Dữ liệu mẫu ban đầu đúng theo mô tả:
-// A: sữa tươi, nước khoáng
-// B: mì tôm
-// C: coca, nước khoáng, nước 247
+// ====== CẤU HÌNH LƯU LOCALSTORAGE ======
+const STORAGE_KEY = 'bangNhapHang_v1';
+
+// Dữ liệu mẫu ban đầu
 let supplierData = {
   'Nhà cung cấp A': [
     {name:'Sữa tươi',unit:'Hộp',qty:'',stock:'',needed:'',note:''},
@@ -118,13 +139,42 @@ let supplierData = {
   ]
 };
 
+let currentSupplier = null;
+
 const supplierSelect = document.getElementById('supplierSelect');
 const tableBody = document.getElementById('tableBody');
 const supplierNameDisplay = document.getElementById('supplierNameDisplay');
+let selectedRow = null;
 
-// Biến lưu NCC đang hiển thị hiện tại để không nhầm khi chuyển dropdown
-let currentSupplier = null;
+// ====== HÀM LƯU / TẢI LOCALSTORAGE ======
+function loadFromStorage(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    if(!data || !data.supplierData) return false;
+    supplierData = data.supplierData;
+    currentSupplier = data.currentSupplier || null;
+    return true;
+  }catch(e){
+    console.warn('Không đọc được localStorage:', e);
+    return false;
+  }
+}
 
+function saveToStorage(){
+  try{
+    const payload = {
+      supplierData,
+      currentSupplier
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }catch(e){
+    console.warn('Không lưu được localStorage:', e);
+  }
+}
+
+// ====== KHỞI TẠO NHÀ CUNG CẤP ======
 function initSuppliers(selectedName){
   const current = selectedName || currentSupplier;
   supplierSelect.innerHTML = '';
@@ -137,7 +187,7 @@ function initSuppliers(selectedName){
 
   if (Object.keys(supplierData).length === 0) {
     currentSupplier = null;
-    supplierNameDisplay.textContent = 'Nhà cung cấp: (chưa chọn)';
+    supplierNameDisplay.textContent = '(chưa chọn)';
     tableBody.innerHTML = '';
     return;
   }
@@ -235,6 +285,7 @@ function saveCurrentSupplierData(){
     });
   });
   supplierData[name] = arr;
+  saveToStorage();
 }
 
 // Render bảng theo NCC đang hiển thị
@@ -262,6 +313,7 @@ function addEmptyRow(){
   const count=tableBody.querySelectorAll('tr').length;
   tableBody.appendChild(createRow(count+1,{name:'',unit:'',qty:'',stock:'',needed:'',note:''}));
   relabelIndex();
+  saveCurrentSupplierData();
 }
 
 // Đánh dấu các dòng không có số lượng để ẩn khi in PDF
@@ -295,7 +347,6 @@ function exportImage(){
   const ok = confirm('Xuất ảnh PNG với các dòng có số lượng > 0?');
   if (!ok) return;
 
-  // luôn lưu lại dữ liệu NCC hiện tại trước khi chụp
   saveCurrentSupplierData();
 
   const originalWrapper = document.getElementById('table-wrapper');
@@ -349,6 +400,7 @@ function addSupplier(){
   currentSupplier = newName;
   initSuppliers(currentSupplier);
   renderTableForSupplier(currentSupplier);
+  saveToStorage();
 }
 
 function renameSupplier(){
@@ -369,6 +421,7 @@ function renameSupplier(){
   currentSupplier = newName;
   initSuppliers(currentSupplier);
   renderTableForSupplier(currentSupplier);
+  saveToStorage();
 }
 
 function deleteSupplier(){
@@ -388,26 +441,30 @@ function deleteSupplier(){
     tableBody.innerHTML='';
     updateSupplierLabel();
   }
+  saveToStorage();
 }
 
 // Khởi tạo
 document.addEventListener('DOMContentLoaded',()=>{
+  // Thử load dữ liệu cũ từ localStorage, nếu có thì dùng, không thì xài dữ liệu mẫu
+  loadFromStorage();
+
   initSuppliers();
   if (supplierSelect.options.length>0){
-    currentSupplier = supplierSelect.value;
+    if (!currentSupplier) currentSupplier = supplierSelect.value;
     renderTableForSupplier(currentSupplier);
   } else {
     updateSupplierLabel();
   }
 
   supplierSelect.addEventListener('change',()=>{
-    // Lưu dữ liệu của NCC cũ trước khi chuyển sang NCC mới
     const previous = currentSupplier;
     if (previous) {
       saveCurrentSupplierData();
     }
     currentSupplier = supplierSelect.value;
     renderTableForSupplier(currentSupplier);
+    saveToStorage();
   });
 
   document.getElementById('btnAddRow').addEventListener('click',addEmptyRow);
@@ -417,6 +474,27 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnAddSupplier').addEventListener('click',addSupplier);
   document.getElementById('btnRenameSupplier').addEventListener('click',renameSupplier);
   document.getElementById('btnDeleteSupplier').addEventListener('click',deleteSupplier);
+
+  // Chọn dòng bằng cách click vào dòng
+  tableBody.addEventListener('click',(e)=>{
+    const tr = e.target.closest('tr');
+    if (!tr) return;
+    if (selectedRow) selectedRow.classList.remove('selected');
+    selectedRow = tr;
+    tr.classList.add('selected');
+  });
+
+  // Xoá dòng được chọn
+  document.getElementById('btnDeleteRow').addEventListener('click',()=>{
+    if (!selectedRow){
+      alert('Chưa chọn dòng để xoá!');
+      return;
+    }
+    selectedRow.remove();
+    selectedRow = null;
+    relabelIndex();
+    saveCurrentSupplierData();
+  });
 });
 </script>
 </body>
